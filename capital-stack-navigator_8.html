@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capital Stack Navigator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#002347; --ink-soft:#5b6b82;
+    --paper:#F5F3EE; --paper-raised:#FFFFFF;
+    --line:#E1DDD1; --line-strong:#C9C4B4;
+    --maroon:#0047AB; --maroon-soft:#e7edf5;
+    --forest:#2F5233; --forest-soft:#E7EEE6;
+    --amber:#9C6B18; --amber-soft:#F3EAD6;
+    --serif:'Source Serif 4', Georgia, serif;
+    --sans:'IBM Plex Sans', -apple-system, sans-serif;
+    --mono:'IBM Plex Mono', 'SF Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ font-family:var(--sans); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  #app{display:flex; min-height:100vh;}
+
+  /* ---------- Auth gate (shared SSO w/ Redmount Terminal) ---------- */
+  .authgate{ position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; z-index:200; padding:24px; }
+  .authcard{ background:var(--paper-raised); border:1px solid var(--line); border-radius:8px; width:100%; max-width:380px; padding:32px 32px 26px; box-shadow:0 8px 24px -12px rgba(51,51,51,0.18); }
+  .authcard .auth-logo{ margin-bottom:20px; display:flex; flex-direction:column; gap:2px; }
+  .authcard .logo-mount{ font-family:var(--sans); font-weight:700; font-size:19px; letter-spacing:.03em; color:var(--ink); }
+  .authcard .logo-capital{ font-family:var(--mono); font-weight:600; font-size:10.5px; letter-spacing:.14em; color:var(--maroon); }
+  .authcard h1{ font-family:var(--serif); font-size:21px; margin:14px 0 4px; color:var(--ink); }
+  .authcard p.sub{ font-size:12.5px; color:var(--ink-soft); margin:0 0 22px; }
+  .authcard label{ display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:5px; margin-top:16px; }
+  .authcard input{ width:100%; padding:10px 12px; border:1px solid var(--line-strong); border-radius:4px; font-size:13.5px; font-family:var(--sans); box-sizing:border-box; background:var(--paper); color:var(--ink); }
+  .authcard input:focus{ outline:none; border-color:var(--maroon); }
+  .authcard button#authSubmit{ width:100%; margin-top:20px; padding:11px; background:var(--maroon); border:1px solid var(--maroon);
+    color:#fff; border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--sans); letter-spacing:.02em; }
+  .authcard button#authSubmit:hover{ background:#1a4b8c; }
+  .authcard button#authSubmit:disabled{ opacity:.6; cursor:not-allowed; }
+  .authcard .err{ font-size:12.5px; color:var(--maroon); margin-top:10px; display:none; }
+  .authcard .err.show{ display:block; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{ width:250px; flex-shrink:0; background:#002347; color:#E8ECF3; padding:26px 18px; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .brand{ font-family:var(--serif); font-size:19px; font-weight:600; letter-spacing:0.01em; line-height:1.25; margin-bottom:2px; color:#fff; }
+  .brand-sub{ font-size:10px; letter-spacing:0.13em; text-transform:uppercase; color:#9FB3D6; margin-bottom:22px; font-weight:500; }
+  .new-assess-btn{ width:100%; background:#0047AB; border:1px solid #0047AB; color:#fff; font-family:var(--sans); font-size:12.5px;
+    font-weight:600; padding:9px 10px; border-radius:4px; cursor:pointer; margin-bottom:18px; }
+  .new-assess-btn:hover{ background:#1a4b8c; }
+  .sidebar-section-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:#9FB3D6; font-weight:600; margin-bottom:8px; }
+  .assess-item{ padding:9px 10px; margin-bottom:3px; border-radius:3px; font-size:12.5px; cursor:pointer; color:#C4D3EA; border-left:2px solid transparent; }
+  .assess-item:hover{ background:rgba(255,255,255,0.08); color:#fff; }
+  .assess-item.active{ background:rgba(255,255,255,0.1); color:#fff; font-weight:700; border-left:2px solid #4a7fc4; }
+  .assess-item .a-name{ font-weight:600; }
+  .assess-item .a-meta{ color:#9FB3D6; font-size:10.5px; margin-top:2px; }
+  .empty-hint{ font-size:11.5px; color:#9FB3D6; line-height:1.6; }
+  .sidebar-foot{ margin-top:auto; padding-top:16px; border-top:1px solid rgba(255,255,255,0.12); font-size:11px; color:#9FB3D6; line-height:1.6; }
+  .tool-switcher-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:#9FB3D6; font-weight:600; margin-bottom:7px; }
+  .tool-switcher{ width:100%; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); color:#fff; font-family:var(--sans); font-size:13px; padding:9px 10px; border-radius:4px; }
+  .tool-switcher option{ color:#111; }
+  .signout-link{ color:#6FA0DB; cursor:pointer; font-weight:600; }
+
+  /* ---------- Main ---------- */
+  .main{ flex:1; padding:34px 46px 90px; max-width:900px; }
+  .page-title{ font-family:var(--serif); font-size:25px; font-weight:600; margin:0 0 4px; }
+  .page-desc{ color:var(--ink-soft); font-size:13.5px; max-width:600px; margin:0 0 30px; line-height:1.55; }
+
+  .field{ margin-bottom:22px; }
+  .field label{ display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:8px; }
+  .field input[type=text]{ width:100%; max-width:420px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:4px; font-size:13.5px; font-family:var(--sans); background:var(--paper-raised); color:var(--ink); }
+  .field input:focus{ outline:none; border-color:var(--maroon); }
+  .opt-grid{ display:flex; flex-direction:column; gap:8px; }
+  .opt-grid.cols2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .opt{ display:flex; align-items:flex-start; gap:10px; padding:11px 14px; border:1px solid var(--line-strong); border-radius:5px; cursor:pointer; background:var(--paper-raised); transition:border-color .12s, background .12s; }
+  .opt:hover{ border-color:var(--maroon); }
+  .opt.selected{ border-color:var(--maroon); background:var(--maroon-soft); }
+  .opt input{ margin-top:2px; accent-color:var(--maroon); }
+  .opt .opt-label{ font-size:13px; font-weight:600; }
+  .opt .opt-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .section-divider{ height:1px; background:var(--line); margin:30px 0; }
+  .section-head{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--maroon); font-weight:700; margin-bottom:16px; }
+  .fin-grid{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px 16px; margin-bottom:10px; }
+  @media (max-width:700px){ .fin-grid{ grid-template-columns:1fr 1fr; } }
+  .fin-field label{ display:block; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:5px; }
+  .fin-field input{ width:100%; padding:8px 10px; border:1px solid var(--line-strong); border-radius:4px; font-size:13px; font-family:var(--mono); background:var(--paper-raised); color:var(--ink); }
+  .fin-field input:focus{ outline:none; border-color:var(--maroon); }
+  .fin-subhead{ font-size:11px; font-weight:700; color:var(--ink); text-transform:uppercase; letter-spacing:.04em; margin:18px 0 10px; }
+  .fin-subhead:first-child{ margin-top:0; }
+
+  .btn{ font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer; padding:11px 22px; border-radius:4px; border:1px solid var(--maroon); background:var(--maroon); color:#fff; }
+  .btn:hover{ background:#1a4b8c; }
+  .btn[disabled]{ opacity:.4; cursor:not-allowed; }
+  .btn-ghost{ background:none; color:var(--ink-soft); border:1px solid var(--line-strong); }
+  .btn-ghost:hover{ border-color:var(--ink); color:var(--ink); background:none; }
+  .btn-row{ display:flex; gap:10px; margin-top:10px; }
+
+  /* ---------- Results ---------- */
+  .result-banner{ background:var(--paper-raised); border:1px solid var(--line); border-radius:8px; padding:26px 28px; margin-bottom:26px; }
+  .result-eyebrow{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--maroon); font-weight:700; margin-bottom:8px; }
+  .result-title{ font-family:var(--serif); font-size:23px; font-weight:600; margin:0 0 10px; }
+  .result-desc{ font-size:13.5px; color:var(--ink-soft); line-height:1.6; max-width:600px; }
+  .score-strip{ display:flex; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden; margin-top:20px; }
+  .score-cell{ flex:1; background:var(--paper-raised); padding:12px 14px; }
+  .score-cell.top{ background:var(--maroon-soft); }
+  .score-lbl{ font-family:var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:4px; }
+  .score-val{ font-family:var(--serif); font-size:19px; font-weight:600; color:var(--ink); }
+
+  .bucket-card{ background:var(--paper-raised); border:1px solid var(--line); border-radius:8px; padding:22px 24px; margin-bottom:16px; }
+  .bucket-card h3{ font-family:var(--serif); font-size:16px; margin:0 0 10px; }
+  .pc-cols{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:640px){ .pc-cols{ grid-template-columns:1fr; } }
+  .pc-col h4{ font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; }
+  .pc-col.pros h4{ color:var(--forest); }
+  .pc-col.cons h4{ color:var(--maroon); }
+  .pc-col ul{ margin:0; padding-left:18px; font-size:13px; line-height:1.65; color:var(--ink); }
+  .routing-note{ background:var(--amber-soft); border:1px solid #E5D3A8; border-radius:6px; padding:14px 16px; font-size:12.5px; color:#6b4d10; line-height:1.6; margin-top:6px; }
+  .save-note{ font-size:11.5px; color:var(--ink-soft); margin-top:18px; }
+  .save-note input{ padding:8px 10px; border:1px solid var(--line-strong); border-radius:4px; font-size:13px; margin-left:6px; width:220px; }
+
+  .cost-note-top{ font-size:12.5px; color:var(--ink-soft); margin:-4px 0 18px; line-height:1.55; }
+  .cost-compare-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:760px){ .cost-compare-grid{ grid-template-columns:1fr; } }
+  .cost-col{ border:1px solid var(--line); border-radius:6px; padding:16px; background:var(--paper); }
+  .cost-col-head{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--maroon); margin-bottom:12px; }
+  .cost-col label{ display:block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:8px 0 3px; }
+  .cost-col input{ width:100%; padding:6px 8px; border:1px solid var(--line-strong); border-radius:3px; font-size:12.5px; font-family:var(--mono); background:var(--paper-raised); color:var(--ink); }
+  .cost-col input:focus{ outline:none; border-color:var(--maroon); }
+  .cost-output{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .cost-annual{ font-family:var(--serif); font-size:19px; font-weight:600; color:var(--ink); }
+  .cost-pct{ font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .cost-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
+
+  .wf-tests{ border:1px solid var(--line); border-radius:6px; overflow:hidden; margin-bottom:16px; }
+  .wf-row{ display:flex; justify-content:space-between; padding:10px 14px; font-size:13px; border-bottom:1px solid var(--line); background:var(--paper-raised); }
+  .wf-row:last-child{ border-bottom:none; }
+  .wf-row.binding{ background:var(--maroon-soft); font-weight:700; }
+  .wf-val{ font-family:var(--mono); }
+  .wf-split{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .wf-split-cell{ background:var(--paper-raised); padding:14px; }
+  .wf-split-lbl{ font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:4px; }
+  .wf-split-val{ font-family:var(--serif); font-size:18px; font-weight:600; }
+
+  @media print{
+    .sidebar, .btn-row, .signout-fixed, .authgate{ display:none !important; }
+    .main{ max-width:100%; padding:0; }
+    .cost-col input, .fin-field input{ border:none; background:none; padding:2px 0; }
+    body{ background:#fff; }
+  }
+</style>
+</head>
+<body>
+<div class="authgate" id="authGate">
+  <div class="authcard">
+    <div class="auth-logo"><span class="logo-mount">REDMOUNT</span><span class="logo-capital">CAPITAL PARTNERS</span></div>
+    <h1>Capital Stack Navigator</h1>
+    <p class="sub">Sign in to access the workspace.</p>
+    <label>Email</label>
+    <input type="email" id="authEmail" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="authPassword" autocomplete="current-password">
+    <button id="authSubmit">Sign in</button>
+    <div class="err" id="authErr"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none;"></div>
+
+<script>
+/* =========================================================================
+   CAPITAL STACK NAVIGATOR — advisory triage wizard.
+   Walks a prospect's situation across use of proceeds, control/dilution
+   tolerance, collateral, leverage, timeline, and cash-flow profile, then
+   recommends a capital-stack bucket (Debt-only / Debt+Mezz / Equity
+   conversation) with qualitative pros/cons. No cost figures are computed
+   for equity or mezzanine — those are soft, sponsor-specific numbers this
+   tool has no visibility into, and presenting them as precise would be
+   misleading. Debt-bucket results route into the existing Cobalt debt
+   tools; equity/mezz results just flag who to loop in.
+   ========================================================================= */
+
+const SUPABASE_URL = 'https://pdympbpyavilstjsmjtm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkeW1wYnB5YXZpbHN0anNtanRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3ODc1NjUsImV4cCI6MjEwMTM2MzU2NX0.zb-moqwGSoOB-rq9OSqk6cLt0JqXlzRBLebMLE2R4DA';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TABLE = 'capital_stack_assessments';
+
+// Cobalt's Debt Capacity Calculator — used as the handoff target for debt-bucket
+// results. Query params are best-effort; verify field names against that tool's
+// actual URL-param handling before relying on them to prefill anything.
+const DEBT_CALC_URL = 'https://cobaltcommercialcredit.github.io/cobalt-debt-capacity-calc/';
+
+/* ---------------------------- Auth (shared SSO) --------------------------- */
+const AUTH = SUPABASE_URL + '/auth/v1';
+const SESSION_KEY = 'redmount_session';
+function $(id){ return document.getElementById(id); }
+async function authSignIn(email, password){
+  const res = await fetch(AUTH + '/token?grant_type=password', {
+    method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error_description || data.msg || 'Incorrect email or password');
+  return data;
+}
+async function authRefresh(refreshToken){
+  const res = await fetch(AUTH + '/token?grant_type=refresh_token', {
+    method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error('refresh failed');
+  return data;
+}
+function saveSession(data){
+  const session = { access_token:data.access_token, refresh_token:data.refresh_token,
+    expires_at: Date.now() + (data.expires_in||3600)*1000, email: data.user && data.user.email };
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify(session)); }catch(e){}
+  return session;
+}
+function loadStoredSession(){
+  try{ const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+}
+function clearSession(){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
+async function ensureValidSession(){
+  const session = loadStoredSession();
+  if(!session) return null;
+  if(Date.now() < session.expires_at - 60000) return session;
+  try{ return saveSession(await authRefresh(session.refresh_token)); }
+  catch(e){ clearSession(); return null; }
+}
+function showAuthErr(msg){ $('authErr').textContent = msg; $('authErr').classList.add('show'); }
+function enterApp(){
+  $('authGate').style.display = 'none';
+  $('app').style.display = 'flex';
+  loadAssessments();
+}
+function showAuthGate(){
+  $('authGate').style.display = 'flex';
+  $('app').style.display = 'none';
+}
+$('authSubmit').addEventListener('click', async ()=>{
+  const email = $('authEmail').value.trim();
+  const password = $('authPassword').value;
+  if(!email || !password){ showAuthErr('Enter an email and password.'); return; }
+  const btn = $('authSubmit'); btn.disabled = true;
+  try{
+    const data = await authSignIn(email, password);
+    const session = saveSession(data);
+    sb.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    enterApp();
+  }catch(e){ showAuthErr(e.message || 'Incorrect email or password'); }
+  btn.disabled = false;
+});
+
+/* ---------------------------- Financial statement inputs & debt capacity engine --------------------------- */
+function n(v){ return Number(v) || 0; }
+
+function defaultFinancials(){
+  return {
+    // Income Statement (single most-recent-period / TTM)
+    revenue:'', cogs:'', opex:'', da:'', interestExpense:'', taxRate:25,
+    // Balance Sheet
+    cash:'', ar:'', inventory:'', otherCurrentAssets:'',
+    ppe:'', realEstate:'', otherLTAssets:'',
+    ap:'', otherCurrentLiabilities:'',
+    existingSeniorDebt:'', existingSubDebt:'', otherLTLiabilities:'',
+    // Debt capacity assumptions
+    maxLeverageMultiple:3.0, minDSCR:1.25,
+    arAdvanceRate:80, invAdvanceRate:50, reAdvanceRate:70,
+  };
+}
+
+function computeIncomeStatement(f){
+  const revenue=n(f.revenue), cogs=n(f.cogs), opex=n(f.opex), da=n(f.da), interestExpense=n(f.interestExpense), taxRate=n(f.taxRate);
+  const grossProfit = revenue - cogs;
+  const ebitda = grossProfit - opex;
+  const ebit = ebitda - da;
+  const ebt = ebit - interestExpense;
+  const taxes = Math.max(0, ebt) * (taxRate/100);
+  const netIncome = ebt - taxes;
+  return { revenue, grossProfit, ebitda, ebit, ebt, taxes, netIncome };
+}
+
+function computeBalanceSheet(f){
+  const cash=n(f.cash), ar=n(f.ar), inventory=n(f.inventory), otherCA=n(f.otherCurrentAssets);
+  const totalCurrentAssets = cash+ar+inventory+otherCA;
+  const ppe=n(f.ppe), realEstate=n(f.realEstate), otherLTAssets=n(f.otherLTAssets);
+  const totalAssets = totalCurrentAssets + ppe + realEstate + otherLTAssets;
+  const ap=n(f.ap), otherCL=n(f.otherCurrentLiabilities);
+  const totalCurrentLiabilities = ap+otherCL;
+  const existingSeniorDebt=n(f.existingSeniorDebt), existingSubDebt=n(f.existingSubDebt), otherLTLiabilities=n(f.otherLTLiabilities);
+  const totalLiabilities = totalCurrentLiabilities+existingSeniorDebt+existingSubDebt+otherLTLiabilities;
+  const equity = totalAssets - totalLiabilities;
+  return { totalCurrentAssets, totalAssets, totalCurrentLiabilities, totalLiabilities, equity, existingSeniorDebt, existingSubDebt, ar, inventory, realEstate };
+}
+
+// Three binding-constraint tests, same logic a bank underwriter runs: leverage multiple,
+// debt-service coverage, and a borrowing-base/collateral ceiling. Whichever is lowest wins —
+// that's the real capacity, not any single test in isolation.
+function computeDebtCapacity(f, ebitda, bs, debtRatePct, debtTermYrs){
+  const existingDebt = bs.existingSeniorDebt + bs.existingSubDebt;
+  const leverageCapacity = Math.max(0, ebitda * n(f.maxLeverageMultiple) - existingDebt);
+
+  const r = n(debtRatePct)/100, term = Math.max(1, n(debtTermYrs));
+  const maxAnnualDebtService = n(f.minDSCR) > 0 ? ebitda / n(f.minDSCR) : 0;
+  const dscrCapacity = Math.max(0, r === 0 ? maxAnnualDebtService * term : maxAnnualDebtService * (1 - Math.pow(1+r, -term)) / r);
+
+  const borrowingBase = Math.max(0,
+    bs.ar * (n(f.arAdvanceRate)/100) +
+    bs.inventory * (n(f.invAdvanceRate)/100) +
+    bs.realEstate * (n(f.reAdvanceRate)/100)
+  );
+
+  const tests = [
+    { name:'Leverage (EBITDA multiple)', value:leverageCapacity },
+    { name:'DSCR / Cash Flow', value:dscrCapacity },
+    { name:'Collateral / Borrowing Base', value:borrowingBase },
+  ];
+  const binding = tests.reduce((min,t)=> t.value < min.value ? t : min, tests[0]);
+  return { leverageCapacity, dscrCapacity, borrowingBase, bindingCapacity: Math.max(0, binding.value), bindingName: binding.name, tests };
+}
+
+/* ---------------------------- Cost-of-capital defaults --------------------------- */
+// Sourced, not invented: sponsor target IRR and mezz pricing pulled from 2026
+// lower-middle-market data (Lincoln International Q2 2026 Middle Market Perspectives;
+// CT Acquisitions 2026 LMM guides; PitchBook Q1 2026 US PE Middle Market Report).
+// All of it is editable per deal — these are starting points, not quotes.
+function defaultCostInputs(){
+  return {
+    amountNeeded: '',
+    debtRate: 9.5, debtTerm: 5, debtFees: 2,
+    mezzCoupon: 11, mezzPik: 3, mezzBlendedIRR: 16,
+    equityIRR: 22, equityHold: 5, exitEbitda: '', exitMultiple: 6,
+  };
+}
+function computeDebtCost(amount, ratePct, termYrs, feesPct){
+  const r = ratePct/100, n = Math.max(1, termYrs);
+  const payment = r === 0 ? amount/n : amount * r / (1 - Math.pow(1+r, -n));
+  const totalPayments = payment * n;
+  const totalInterest = totalPayments - amount;
+  const feesAmt = amount * (feesPct/100);
+  const annualDollarCost = (totalInterest + feesAmt) / n;
+  // Effective rate = nominal rate plus fees spread evenly over the term. (Total interest
+  // divided by original-principal-times-term would understate this, since it averages
+  // against the full original balance even in later years when it's been paid down —
+  // that's not a number you can honestly compare against a quoted rate.)
+  const effectiveAnnualPct = ratePct + (feesPct / n);
+  return { annualPayment: payment, totalInterest, feesAmt, annualDollarCost, effectiveAnnualPct };
+}
+function computeMezzCost(amount, cashCouponPct, pikPct, blendedIrrPct){
+  const annualCashCost = amount * (cashCouponPct/100);
+  const annualBlendedCost = amount * (blendedIrrPct/100);
+  return { annualCashCost, annualBlendedCost, effectiveAnnualPct: blendedIrrPct };
+}
+function computeEquityCost(amount, targetIrrPct, holdYrs, exitEbitda, exitMultiple){
+  const r = targetIrrPct/100, n = Math.max(1, holdYrs);
+  const exitValueOwed = amount * Math.pow(1+r, n);
+  const totalReturnToInvestor = exitValueOwed - amount;
+  const avgAnnualDollarCost = totalReturnToInvestor / n;
+  let impliedExitValue = null, impliedOwnershipPct = null;
+  if(Number(exitEbitda) > 0 && Number(exitMultiple) > 0){
+    impliedExitValue = Number(exitEbitda) * Number(exitMultiple);
+    impliedOwnershipPct = impliedExitValue > 0 ? (exitValueOwed / impliedExitValue) * 100 : null;
+  }
+  return { exitValueOwed, totalReturnToInvestor, avgAnnualDollarCost, effectiveAnnualPct: targetIrrPct, impliedExitValue, impliedOwnershipPct };
+}
+
+/* ---------------------------- Wizard config --------------------------- */
+const STEPS = [
+  { key:'useOfProceeds', label:'Use of Proceeds', options:[
+    {v:'growth', t:'Growth capital', s:'Expansion, hiring, new location, inventory build'},
+    {v:'acquisition', t:'Acquisition', s:'Buying another business or a book of business'},
+    {v:'recap', t:'Recapitalization / partial buyout', s:'Buying out a partner, taking chips off the table'},
+    {v:'refi', t:'Refinance existing debt', s:'Replacing or restructuring current obligations'},
+    {v:'workingcapital', t:'Working capital', s:'Smoothing cash flow, funding receivables/payables gap'},
+    {v:'fullsale', t:'Full sale of the business', s:'Complete exit — no ongoing involvement post-close'},
+  ]},
+  { key:'controlTolerance', label:'Control Tolerance', options:[
+    {v:'keep100', t:'Keep 100% control', s:'Not willing to add a board seat or outside vote'},
+    {v:'minority', t:'Open to a minority stake', s:'Willing to bring in an outside investor below 50%'},
+    {v:'majority', t:'Open to a majority or full sale', s:'Willing to give up control or exit entirely'},
+  ]},
+  { key:'dilutionTolerance', label:'Dilution Tolerance', options:[
+    {v:'none', t:'None', s:'Not willing to give up any equity'},
+    {v:'upto20', t:'Up to ~20%', s:''},
+    {v:'20to49', t:'20%–49%', s:''},
+    {v:'majority', t:'Open to giving up majority', s:''},
+  ]},
+  { key:'collateral', label:'Collateral Available', options:[
+    {v:'arinv', t:'AR / Inventory', s:''},
+    {v:'equipment', t:'Equipment', s:''},
+    {v:'re', t:'Real estate', s:''},
+    {v:'none', t:'None / unsecured', s:'No hard assets to pledge'},
+  ], multi:true },
+  { key:'leverage', label:'Current Leverage', options:[
+    {v:'light', t:'Light', s:'Under ~2x EBITDA'},
+    {v:'moderate', t:'Moderate', s:'Roughly 2x–4x EBITDA'},
+    {v:'heavy', t:'Highly levered', s:'Over ~4x EBITDA'},
+  ]},
+  { key:'timeline', label:'Timeline to Close', options:[
+    {v:'urgent', t:'Under 30 days', s:''},
+    {v:'standard', t:'30–90 days', s:''},
+    {v:'flexible', t:'Flexible / 90+ days', s:''},
+  ]},
+  { key:'cashFlow', label:'Cash Flow Profile', options:[
+    {v:'stable', t:'Profitable and stable', s:''},
+    {v:'growing', t:'Growing, but thin margins', s:''},
+    {v:'preprofit', t:'Pre-profit or burning cash', s:''},
+  ]},
+  { key:'ownershipGoal', label:'Post-Close Ownership Goal', optional:true, options:[
+    {v:'hold', t:'Hold indefinitely', s:''},
+    {v:'exit35', t:'Exit in 3–5 years', s:''},
+    {v:'exit510', t:'Exit in 5–10 years', s:''},
+    {v:'undecided', t:'Undecided', s:''},
+  ]},
+];
+
+const BUCKET_CONTENT = {
+  debt: {
+    title:'Debt-Only', eyebrow:'Recommended Path',
+    desc:'The profile here points to a straightforward debt solution — no need to give up equity or control to get this done.',
+    pros:['Keeps 100% ownership and control','Interest is deductible; principal builds equity, not someone else\'s upside','Fastest path to close of the three','Cost is a known, fixed number — not an assumption'],
+    cons:['Requires debt service regardless of performance','Collateral or covenants may be required depending on structure','Leverage capacity is finite — doesn\'t solve for businesses that can\'t support the payment'],
+  },
+  mezz: {
+    title:'Debt + Mezzanine', eyebrow:'Recommended Path',
+    desc:'Senior debt alone likely doesn\'t cover the full need here. A blended structure — senior debt plus a subordinated piece — can close the gap without a full equity raise.',
+    pros:['Preserves more ownership than a straight equity raise','Can bridge a gap senior lenders won\'t reach','Current-pay coupon is known; PIK/kicker terms are negotiable, not fixed by a third party\'s underwriting'],
+    cons:['More expensive than senior debt alone','Often includes warrants or an equity kicker — some dilution, just less than a straight raise','Adds a second lender relationship and intercreditor complexity'],
+  },
+  equity: {
+    title:'Equity Conversation Needed', eyebrow:'Refer, Don\'t Model',
+    desc:'This profile is outside what a debt-underwriting lens can responsibly size — either the risk tolerance, control willingness, or cash flow profile points toward an equity conversation instead.',
+    pros:['Can fund things debt can\'t underwrite (pre-profit, high leverage, true control sale)','No fixed debt service — investor is aligned on the same outcome','Can bring more than capital — board experience, operating help, follow-on capacity'],
+    cons:['Real dilution and typically a board seat / voting rights','Cost is a function of an assumed future exit value — soft, not a number this tool should quote','Process is materially slower than a debt closing'],
+  },
+  sale: {
+    title:'Sale / Exit Conversation', eyebrow:'M&A, Not Financing',
+    desc:'Willingness to give up control or exit entirely puts this outside a financing conversation altogether — this is a sale process. The analysis below is a directional read on what proceeds could look like, not a valuation opinion or a listing price.',
+    pros:['Full liquidity, not leveraged upside tied to future performance','No ongoing debt service or investor reporting obligations post-close','Clean break — useful for retirement, health, partner disputes, or burnout situations'],
+    cons:['Irreversible — no way to recapture upside if the business grows after sale','Proceeds depend heavily on buyer, deal structure, and market timing — the estimate below is directional only','Tax treatment (asset vs. stock sale) materially changes what\'s actually kept — needs a CPA before any number here is relied on'],
+  },
+};
+
+/* ---------------------------- Sale / exit analysis --------------------------- */
+// Sourced defaults, same discipline as the debt/mezz/equity assumptions: LMM EBITDA
+// multiples run roughly 5-7x depending on size and sector (per the same 2026 LMM data
+// used elsewhere in this tool); revenue multiples vary far more by industry and margin
+// profile, so that figure is a sanity-check cross-reference, not a primary driver.
+function defaultSaleInputs(){
+  return {
+    saleEbitdaMultiple: 5.5,
+    saleRevenueMultiple: 1.0,
+    transactionCostPct: 3,
+    blendedTaxRate: 30,
+  };
+}
+
+function computeSaleAnalysis(f, si){
+  const is = computeIncomeStatement(f);
+  const bs = computeBalanceSheet(f);
+  const evFromEbitda = is.ebitda * n(si.saleEbitdaMultiple);
+  const evFromRevenue = is.revenue * n(si.saleRevenueMultiple);
+  const netDebt = bs.existingSeniorDebt + bs.existingSubDebt;
+  const transactionCosts = evFromEbitda * (n(si.transactionCostPct)/100);
+  const netProceedsBeforeTax = Math.max(0, evFromEbitda - netDebt - transactionCosts);
+  // Directional only: applies the blended rate to total proceeds, not to gain over cost basis
+  // (basis isn't captured here). Actual tax is very likely lower than this once basis is
+  // accounted for — this deliberately errs conservative rather than under-stating it.
+  const estimatedTaxes = netProceedsBeforeTax * (n(si.blendedTaxRate)/100);
+  const netProceedsAfterTax = Math.max(0, netProceedsBeforeTax - estimatedTaxes);
+  return { ebitda: is.ebitda, revenue: is.revenue, evFromEbitda, evFromRevenue, netDebt, transactionCosts, netProceedsBeforeTax, estimatedTaxes, netProceedsAfterTax };
+}
+
+/* ---------------------------- Scoring --------------------------- */
+function scoreAssessment(a){
+  let debt=0, mezz=0, equity=0;
+  const add = (d,m,e)=>{ debt+=d; mezz+=m; equity+=e; };
+
+  switch(a.controlTolerance){
+    case 'keep100': add(3,1,0); break;
+    case 'minority': add(0,2,1); break;
+    case 'majority': add(0,0,3); break;
+  }
+  switch(a.dilutionTolerance){
+    case 'none': add(3,0,0); break;
+    case 'upto20': add(1,2,0); break;
+    case '20to49': add(0,1,2); break;
+    case 'majority': add(0,0,3); break;
+  }
+  switch(a.cashFlow){
+    case 'stable': add(3,1,0); break;
+    case 'growing': add(1,2,1); break;
+    case 'preprofit': add(-2,0,3); break;
+  }
+  switch(a.leverage){
+    case 'light': add(2,1,0); break;
+    case 'moderate': add(0,1,1); break;
+    case 'heavy': add(-2,1,2); break;
+  }
+  const secured = (a.collateral||[]).some(c=>c!=='none') && (a.collateral||[]).length>0;
+  if(secured) add(2,1,0); else add(0,1,1);
+
+  switch(a.useOfProceeds){
+    case 'acquisition': add(0,1,1); break;
+    case 'recap': add(0,1,2); break;
+    case 'refi': case 'workingcapital': add(2,0,0); break;
+    case 'growth': add(1,1,0); break;
+  }
+  switch(a.timeline){
+    case 'urgent': add(2,0,-1); break;
+    case 'flexible': add(0,0,1); break;
+  }
+
+  // Hard overrides — situations where the math above could technically favor debt
+  // but the deal is not one a lender will underwrite, or is structurally an M&A
+  // transaction rather than a financing.
+  let bucket;
+  if(a.useOfProceeds === 'fullsale' || a.controlTolerance === 'majority'){
+    bucket = 'sale'; // explicit full-sale intent, or willingness to give up control entirely — either way this is a sale conversation, not a capital raise
+  } else if(a.cashFlow === 'preprofit' && !secured){
+    bucket = 'equity';
+  } else {
+    if(debt >= mezz && debt >= equity) bucket = 'debt';
+    else if(mezz >= equity) bucket = 'mezz';
+    else bucket = 'equity';
+  }
+  return { debt, mezz, equity, bucket };
+}
+
+/* ---------------------------- State --------------------------- */
+let assessments = [];
+let currentId = null;   // null = new/unsaved
+let draft = null;       // in-progress answers for the wizard
+let view = 'new';       // 'new' | 'result'
+let saveState = 'idle';
+let lastSaveError = '';
+let loadError = '';
+
+function blankDraft(){
+  return { prospectName:'', companyName:'', useOfProceeds:'', controlTolerance:'', dilutionTolerance:'',
+    collateral:[], leverage:'', timeline:'', cashFlow:'', ownershipGoal:'', costInputs: defaultCostInputs(),
+    financials: defaultFinancials(), saleInputs: defaultSaleInputs() };
+}
+
+async function loadAssessments(){
+  try{
+    const { data, error } = await sb.from(TABLE).select('*').order('created_at', { ascending:false });
+    if(error) throw error;
+    assessments = data || [];
+    loadError = '';
+  }catch(e){
+    console.error('load failed', e);
+    assessments = [];
+    loadError = (e && (e.message || e.error_description || e.msg)) || 'Unknown error loading saved assessments — see browser console.';
+  }
+  render();
+}
+
+async function persistAssessment(a){
+  saveState = 'saving'; lastSaveError = ''; render();
+  const payload = {
+    prospect_name: a.prospectName || null, company_name: a.companyName || null,
+    inputs: {
+      useOfProceeds:a.useOfProceeds, controlTolerance:a.controlTolerance, dilutionTolerance:a.dilutionTolerance,
+      collateral:a.collateral, leverage:a.leverage, timeline:a.timeline, cashFlow:a.cashFlow, ownershipGoal:a.ownershipGoal,
+      costInputs: a.costInputs, financials: a.financials, saleInputs: a.saleInputs
+    },
+    recommended_bucket: a.result ? a.result.bucket : null,
+  };
+  try{
+    if(a.id){
+      const { error } = await sb.from(TABLE).update(payload).eq('id', a.id);
+      if(error) throw error;
+    } else {
+      const { data, error } = await sb.from(TABLE).insert(payload).select().single();
+      if(error) throw error;
+      a.id = data.id;
+    }
+    saveState = 'saved';
+    await loadAssessments();
+    currentId = a.id;
+  }catch(e){
+    console.error('save failed', e);
+    saveState = 'error';
+    lastSaveError = (e && (e.message || e.error_description || e.msg)) || 'Unknown error — see browser console.';
+    render();
+  }
+}
+
+function startNew(){
+  draft = blankDraft();
+  currentId = null;
+  view = 'new';
+  render();
+}
+
+function openSaved(id){
+  const rec = assessments.find(x=>x.id===id);
+  if(!rec) return;
+  draft = { prospectName: rec.prospect_name||'', companyName: rec.company_name||'', ...rec.inputs };
+  if(!draft.costInputs) draft.costInputs = defaultCostInputs(); // older saved records won't have this yet
+  if(!draft.financials) draft.financials = defaultFinancials(); // older saved records won't have this yet
+  if(!draft.saleInputs) draft.saleInputs = defaultSaleInputs(); // older saved records won't have this yet
+  draft.result = scoreAssessment(draft);
+  currentId = id;
+  view = 'result';
+  render();
+}
+
+function isComplete(d){
+  return d.useOfProceeds && d.controlTolerance && d.dilutionTolerance && d.collateral.length &&
+    d.leverage && d.timeline && d.cashFlow && Number(d.costInputs.amountNeeded) > 0;
+}
+
+
+/* ---------------------------- Render --------------------------- */
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+}
+
+function renderSidebar(){
+  const items = assessments.map(a=>{
+    const active = a.id===currentId ? 'active' : '';
+    const name = a.prospect_name || a.company_name || 'Untitled';
+    const bucketLbl = a.recommended_bucket ? (BUCKET_CONTENT[a.recommended_bucket]||{}).title : '—';
+    return `<div class="assess-item ${active}" data-open="${a.id}">
+      <div class="a-name">${escapeHtml(name)}</div>
+      <div class="a-meta">${escapeHtml(bucketLbl||'')} · ${fmtDate(a.created_at)}</div>
+    </div>`;
+  }).join('');
+  return `
+  <div class="sidebar">
+    <div class="brand">Capital Stack</div>
+    <div class="brand-sub">Navigator</div>
+    <button class="new-assess-btn" id="newAssessBtn">+ New Assessment</button>
+    <div class="sidebar-section-label">Saved Assessments</div>
+    ${loadError ? `<div class="empty-hint" style="color:#f2a2a2;">Couldn't load saved assessments: ${escapeHtml(loadError)}</div>` : ''}
+    ${assessments.length ? items : (loadError ? '' : '<div class="empty-hint">Nothing saved yet — run an assessment and save it to see it here.</div>')}
+
+    <div class="tool-switcher-label">Switch Tool</div>
+    <select class="tool-switcher" id="toolSwitcher">
+      <option value="">— Redmount Tools —</option>
+      <option value="https://redmountcurtis.github.io/Redmount-Terminal/">Terminal (Home)</option>
+      <option value="https://redmountcurtis.github.io/401k/">Fiduciary Monitor</option>
+      <option value="https://redmountcurtis.github.io/capital-stack-navigator/" selected disabled>Capital Stack Navigator (current)</option>
+      <option value="https://redmountcurtis.github.io/risk-modeling/">Risk Modeling</option>
+    </select>
+
+    <div class="sidebar-foot">Advisory tool — Redmount Capital Partners.<br>Debt-bucket results route to Cobalt's Debt Capacity Calculator.<br><span class="signout-link" id="signOutBtn">Sign out</span></div>
+  </div>`;
+}
+
+function optionHtml(step, val){
+  const selected = step.multi ? (val||[]).includes.bind(val||[]) : (v)=>val===v;
+  return `<div class="opt-grid ${step.options.length>4?'cols2':''}">` + step.options.map(o=>{
+    const isSel = step.multi ? (val||[]).includes(o.v) : val===o.v;
+    return `<label class="opt ${isSel?'selected':''}">
+      <input type="${step.multi?'checkbox':'radio'}" name="${step.key}" value="${o.v}" ${isSel?'checked':''}>
+      <div><div class="opt-label">${escapeHtml(o.t)}</div>${o.s?`<div class="opt-sub">${escapeHtml(o.s)}</div>`:''}</div>
+    </label>`;
+  }).join('') + `</div>`;
+}
+
+function finField(f, key, label, placeholder){
+  return `<div class="fin-field"><label>${escapeHtml(label)}</label><input data-fin="${key}" type="number" step="1000" value="${escapeHtml(f[key])}" placeholder="${placeholder||''}"></div>`;
+}
+
+function renderFinancialsSection(d){
+  const f = d.financials;
+  return `
+    <div class="section-head">Financials — drives real debt capacity (optional but recommended)</div>
+    <div class="page-desc" style="margin-bottom:16px;">Leave this blank and the tool falls back to comparing debt/mezz/equity on the full amount above with no capacity check. Fill it in and debt gets sized off three real lending tests — leverage multiple, DSCR, and a borrowing base — with the lowest one binding, same as a real underwriter would run it.</div>
+
+    <div class="fin-subhead">Income Statement (most recent FY or TTM)</div>
+    <div class="fin-grid">
+      ${finField(f,'revenue','Revenue','10000000')}
+      ${finField(f,'cogs','COGS','6000000')}
+      ${finField(f,'opex','Operating Expenses (excl. D&A)','2500000')}
+      ${finField(f,'da','Depreciation & Amortization','500000')}
+      ${finField(f,'interestExpense','Existing Interest Expense','300000')}
+      ${finField(f,'taxRate','Tax Rate (%)','25')}
+    </div>
+
+    <div class="fin-subhead">Balance Sheet — Assets</div>
+    <div class="fin-grid">
+      ${finField(f,'cash','Cash','500000')}
+      ${finField(f,'ar','Accounts Receivable','1200000')}
+      ${finField(f,'inventory','Inventory','800000')}
+      ${finField(f,'otherCurrentAssets','Other Current Assets','100000')}
+      ${finField(f,'ppe','Net PP&E','2000000')}
+      ${finField(f,'realEstate','Owned Real Estate','0')}
+      ${finField(f,'otherLTAssets','Other Long-Term Assets','200000')}
+    </div>
+
+    <div class="fin-subhead">Balance Sheet — Liabilities</div>
+    <div class="fin-grid">
+      ${finField(f,'ap','Accounts Payable','600000')}
+      ${finField(f,'otherCurrentLiabilities','Other Current Liabilities','100000')}
+      ${finField(f,'existingSeniorDebt','Existing Senior Debt','1500000')}
+      ${finField(f,'existingSubDebt','Existing Sub/Mezz Debt','0')}
+      ${finField(f,'otherLTLiabilities','Other Long-Term Liabilities','50000')}
+    </div>
+
+    <div class="fin-subhead">Debt Capacity Assumptions</div>
+    <div class="fin-grid">
+      ${finField(f,'maxLeverageMultiple','Max Leverage (x EBITDA)','3.0')}
+      ${finField(f,'minDSCR','Min DSCR (x)','1.25')}
+      ${finField(f,'arAdvanceRate','AR Advance Rate (%)','80')}
+      ${finField(f,'invAdvanceRate','Inventory Advance Rate (%)','50')}
+      ${finField(f,'reAdvanceRate','Real Estate Advance Rate (%)','70')}
+    </div>
+  `;
+}
+
+function renderWizard(){
+  const d = draft;
+  const stepsHtml = STEPS.map(step=>`
+    <div class="field">
+      <label>${step.label}${step.optional?' (optional)':''}</label>
+      ${optionHtml(step, d[step.key])}
+    </div>
+  `).join('');
+
+  return `
+  <div class="main">
+    <div class="page-title">Capital Stack Navigator</div>
+    <div class="page-desc">Walk through a prospect's situation to get a directional read on whether debt, a blended debt+mezz structure, or an equity conversation fits best — then compare what each would actually cost on the same dollar amount.</div>
+
+    <div class="field">
+      <label>Prospect / Contact Name</label>
+      <input type="text" id="prospectName" value="${escapeHtml(d.prospectName)}" placeholder="e.g. Dana Whitfield">
+    </div>
+    <div class="field">
+      <label>Company Name</label>
+      <input type="text" id="companyName" value="${escapeHtml(d.companyName)}" placeholder="e.g. Whitfield Manufacturing">
+    </div>
+    <div class="field">
+      <label>Capital Amount Needed</label>
+      <input type="text" inputmode="decimal" id="amountNeeded" value="${escapeHtml(d.costInputs.amountNeeded)}" placeholder="e.g. 2000000">
+    </div>
+    <div class="section-divider"></div>
+    ${stepsHtml}
+    <div class="section-divider"></div>
+    ${renderFinancialsSection(d)}
+
+    <div class="btn-row">
+      <button class="btn" id="runAssessBtn" ${isComplete(d)?'':'disabled'}>Run Assessment</button>
+    </div>
+  </div>`;
+}
+
+function fmtMoney(v){
+  if(v==null || isNaN(v)) return '—';
+  return '$' + Math.round(v).toLocaleString();
+}
+
+function debtOutputHtml(r){
+  return `<div class="cost-annual">${fmtMoney(r.annualDollarCost)}/yr</div>
+    <div class="cost-pct">${r.effectiveAnnualPct.toFixed(1)}% effective annual cost</div>
+    <div class="cost-note">Fixed cash obligation regardless of performance. Doesn't touch ownership.</div>`;
+}
+function mezzOutputHtml(r){
+  return `<div class="cost-annual">${fmtMoney(r.annualCashCost)}/yr cash</div>
+    <div class="cost-pct">${r.effectiveAnnualPct.toFixed(1)}% blended (incl. PIK + kicker)</div>
+    <div class="cost-note">Only the cash coupon hits cash flow now — ${fmtMoney(r.annualBlendedCost)}/yr is the full economic cost once PIK and any warrant value realize at exit or refinance.</div>`;
+}
+function equityOutputHtml(r){
+  const ownershipLine = r.impliedOwnershipPct != null
+    ? `<div class="cost-annual" style="margin-top:10px;font-size:16px;">${r.impliedOwnershipPct.toFixed(1)}% ownership</div>
+       <div class="cost-pct">implied stake, on an assumed exit value of ${fmtMoney(r.impliedExitValue)}</div>
+       <div class="cost-note">This % is only as good as the exit multiple assumption — small changes to the multiple swing it a lot. Treat as directional, not diligence-grade.</div>`
+    : `<div class="cost-note">Enter Exit EBITDA and an exit multiple below to see the implied ownership % this would require — without that, cost is shown as an annualized rate only, not a stake.</div>`;
+  return `<div class="cost-annual">${fmtMoney(r.avgAnnualDollarCost)}/yr equiv.</div>
+    <div class="cost-pct">${r.effectiveAnnualPct.toFixed(1)}% target return</div>
+    <div class="cost-note">Not a cash outflow — this is value transferred to the investor via ownership, realized at exit (~${fmtMoney(r.exitValueOwed)} total), not paid annually.</div>
+    ${ownershipLine}`;
+}
+// Recomputes and patches just the three output blocks in place, so typing in a
+// cost-assumption field doesn't force a full re-render (which would blow away
+// focus/cursor position mid-keystroke).
+// Single source of truth for the whole results view: computes the income statement,
+// balance sheet, three-test debt capacity, and how the total need splits between
+// debt (up to capacity) and the gap that mezz/equity have to cover.
+function computeCapitalStackSplit(d){
+  const f = d.financials, ci = d.costInputs;
+  const is = computeIncomeStatement(f);
+  const bs = computeBalanceSheet(f);
+  const capacity = computeDebtCapacity(f, is.ebitda, bs, ci.debtRate, ci.debtTerm);
+  const totalNeed = Number(ci.amountNeeded) || 0;
+  const debtAmount = Math.min(capacity.bindingCapacity, totalNeed);
+  const gap = Math.max(0, totalNeed - debtAmount);
+  return { is, bs, capacity, totalNeed, debtAmount, gap };
+}
+
+function waterfallHtml(split){
+  const { is, capacity, totalNeed, debtAmount, gap } = split;
+  const hasFinancials = is.revenue > 0 || is.ebitda !== 0;
+  if(!hasFinancials){
+    return `<div class="cost-note-top">No financials entered — falling back to comparing all three structures on the full ${fmtMoney(totalNeed)} need, with no capacity check. Go back and fill in the Financials section on the intake form for a real debt-capacity read.</div>`;
+  }
+  const rows = capacity.tests.map(t=>{
+    const isBinding = t.name === capacity.bindingName;
+    return `<div class="wf-row ${isBinding?'binding':''}"><span class="wf-label">${escapeHtml(t.name)}${isBinding?' — binding':''}</span><span class="wf-val">${fmtMoney(t.value)}</span></div>`;
+  }).join('');
+  return `
+    <div class="cost-note-top">EBITDA of ${fmtMoney(is.ebitda)} run through three lending tests — the lowest one binds, same as a real underwriter would size it.</div>
+    <div class="wf-tests">${rows}</div>
+    <div class="wf-split">
+      <div class="wf-split-cell"><div class="wf-split-lbl">Total Capital Need</div><div class="wf-split-val">${fmtMoney(totalNeed)}</div></div>
+      <div class="wf-split-cell"><div class="wf-split-lbl">Debt Capacity Available</div><div class="wf-split-val">${fmtMoney(debtAmount)}</div></div>
+      <div class="wf-split-cell"><div class="wf-split-lbl">Gap (Mezz + Equity)</div><div class="wf-split-val">${fmtMoney(gap)}</div></div>
+    </div>
+  `;
+}
+
+function renderCapacityWaterfall(d){
+  const split = computeCapitalStackSplit(d);
+  return `
+    <div class="bucket-card">
+      <h3>Debt Capacity Waterfall</h3>
+      <div id="waterfallOutput">${waterfallHtml(split)}</div>
+    </div>
+  `;
+}
+
+function updateCostOutputs(){
+  const split = computeCapitalStackSplit(draft);
+  const ci = draft.costInputs;
+  const wfEl = $('waterfallOutput'); if(wfEl) wfEl.innerHTML = waterfallHtml(split);
+  const debtEl = $('debtOutput'), mezzEl = $('mezzOutput'), equityEl = $('equityOutput');
+  if(debtEl) debtEl.innerHTML = debtOutputHtml(computeDebtCost(split.debtAmount, ci.debtRate, ci.debtTerm, ci.debtFees));
+  if(mezzEl) mezzEl.innerHTML = mezzOutputHtml(computeMezzCost(split.gap, ci.mezzCoupon, ci.mezzPik, ci.mezzBlendedIRR));
+  if(equityEl) equityEl.innerHTML = equityOutputHtml(computeEquityCost(split.gap, ci.equityIRR, ci.equityHold, ci.exitEbitda, ci.exitMultiple));
+  const headEl = $('costCompareHeading'); if(headEl) headEl.textContent = `Cost of Capital Comparison — Debt ${fmtMoney(split.debtAmount)} / Gap ${fmtMoney(split.gap)}`;
+}
+
+function renderCostComparison(d){
+  const ci = d.costInputs;
+  const split = computeCapitalStackSplit(d);
+  const debtR = computeDebtCost(split.debtAmount, ci.debtRate, ci.debtTerm, ci.debtFees);
+  const mezzR = computeMezzCost(split.gap, ci.mezzCoupon, ci.mezzPik, ci.mezzBlendedIRR);
+  const equityR = computeEquityCost(split.gap, ci.equityIRR, ci.equityHold, ci.exitEbitda, ci.exitMultiple);
+
+  return `
+    <div class="bucket-card">
+      <h3 id="costCompareHeading">Cost of Capital Comparison — Debt ${fmtMoney(split.debtAmount)} / Gap ${fmtMoney(split.gap)}</h3>
+      <div class="cost-note-top">Debt is sized to the computed capacity above (capped at what's actually needed). Mezz and equity are compared on whatever's left — the real gap, not a guess. Mezz/equity assumptions are seeded from 2026 lower-middle-market benchmarks (Lincoln International Q2 2026 Middle Market Perspectives; general LMM PE return data) — starting points to adjust per deal, not quotes.</div>
+      <div class="cost-compare-grid">
+        <div class="cost-col">
+          <div class="cost-col-head">Debt</div>
+          <label>Rate (%)</label><input data-cost="debtRate" type="number" step="0.1" value="${ci.debtRate}">
+          <label>Term (yrs)</label><input data-cost="debtTerm" type="number" step="1" value="${ci.debtTerm}">
+          <label>Upfront Fees (%)</label><input data-cost="debtFees" type="number" step="0.1" value="${ci.debtFees}">
+          <div class="cost-output" id="debtOutput">${debtOutputHtml(debtR)}</div>
+        </div>
+        <div class="cost-col">
+          <div class="cost-col-head">Debt + Mezzanine</div>
+          <label>Cash Coupon (%)</label><input data-cost="mezzCoupon" type="number" step="0.1" value="${ci.mezzCoupon}">
+          <label>PIK (%)</label><input data-cost="mezzPik" type="number" step="0.1" value="${ci.mezzPik}">
+          <label>Blended Target IRR (%)</label><input data-cost="mezzBlendedIRR" type="number" step="0.1" value="${ci.mezzBlendedIRR}">
+          <div class="cost-output" id="mezzOutput">${mezzOutputHtml(mezzR)}</div>
+        </div>
+        <div class="cost-col">
+          <div class="cost-col-head">Equity</div>
+          <label>Sponsor Target IRR (%)</label><input data-cost="equityIRR" type="number" step="0.5" value="${ci.equityIRR}">
+          <label>Hold Period (yrs)</label><input data-cost="equityHold" type="number" step="1" value="${ci.equityHold}">
+          <label>Exit EBITDA ($, optional)</label><input data-cost="exitEbitda" type="number" step="10000" value="${ci.exitEbitda}" placeholder="e.g. 3000000">
+          <label>Exit Multiple (x EBITDA)</label><input data-cost="exitMultiple" type="number" step="0.5" value="${ci.exitMultiple}" placeholder="e.g. 5">
+          <div class="cost-output" id="equityOutput">${equityOutputHtml(equityR)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function saleOutputHtml(sale, si){
+  const hasFinancials = sale.ebitda > 0 || sale.revenue > 0;
+  if(!hasFinancials){
+    return `<div class="cost-note-top">No financials entered — go back to the intake form and fill in the Income Statement / Balance Sheet to get a real proceeds estimate.</div>`;
+  }
+  return `
+    <div class="cost-note-top">Enterprise value driven off the EBITDA multiple. The revenue multiple is a cross-check only — not fed into the waterfall — since revenue multiples vary enormously by industry and margin profile.</div>
+    <div class="wf-split" style="margin-bottom:16px;">
+      <div class="wf-split-cell"><div class="wf-split-lbl">EV — EBITDA Method</div><div class="wf-split-val">${fmtMoney(sale.evFromEbitda)}</div></div>
+      <div class="wf-split-cell"><div class="wf-split-lbl">EV — Revenue Method (x-check)</div><div class="wf-split-val">${fmtMoney(sale.evFromRevenue)}</div></div>
+    </div>
+    <div class="wf-tests">
+      <div class="wf-row"><span class="wf-label">Enterprise Value (EBITDA method)</span><span class="wf-val">${fmtMoney(sale.evFromEbitda)}</span></div>
+      <div class="wf-row"><span class="wf-label">Less: Existing Debt Payoff</span><span class="wf-val">(${fmtMoney(sale.netDebt)})</span></div>
+      <div class="wf-row"><span class="wf-label">Less: Transaction Costs</span><span class="wf-val">(${fmtMoney(sale.transactionCosts)})</span></div>
+      <div class="wf-row binding"><span class="wf-label">Net Proceeds Before Tax</span><span class="wf-val">${fmtMoney(sale.netProceedsBeforeTax)}</span></div>
+      <div class="wf-row"><span class="wf-label">Less: Estimated Taxes (directional)</span><span class="wf-val">(${fmtMoney(sale.estimatedTaxes)})</span></div>
+      <div class="wf-row binding"><span class="wf-label">Est. Net Proceeds After Tax</span><span class="wf-val">${fmtMoney(sale.netProceedsAfterTax)}</span></div>
+    </div>
+    <div class="cost-note">The after-tax line applies a flat blended rate to total proceeds, not to gain over cost basis — actual tax is very likely lower once basis is factored in. This is a directional, conservative estimate only. Loop in a CPA before this number goes anywhere near a client.</div>
+  `;
+}
+
+function updateSaleOutputs(){
+  const sale = computeSaleAnalysis(draft.financials, draft.saleInputs);
+  const el = $('saleOutput');
+  if(el) el.innerHTML = saleOutputHtml(sale, draft.saleInputs);
+}
+
+function renderSaleAnalysis(d){
+  const si = d.saleInputs;
+  const sale = computeSaleAnalysis(d.financials, si);
+  return `
+    <div class="bucket-card">
+      <h3>Sale / Exit Proceeds Estimate</h3>
+      <div class="cost-compare-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="cost-col">
+          <div class="cost-col-head">Valuation Assumptions</div>
+          <label>EBITDA Multiple (x)</label><input data-sale="saleEbitdaMultiple" type="number" step="0.1" value="${si.saleEbitdaMultiple}">
+          <label>Revenue Multiple (x, cross-check only)</label><input data-sale="saleRevenueMultiple" type="number" step="0.1" value="${si.saleRevenueMultiple}">
+        </div>
+        <div class="cost-col">
+          <div class="cost-col-head">Deal Cost Assumptions</div>
+          <label>Transaction Costs (% of EV)</label><input data-sale="transactionCostPct" type="number" step="0.5" value="${si.transactionCostPct}">
+          <label>Blended Tax Rate (%, directional only)</label><input data-sale="blendedTaxRate" type="number" step="1" value="${si.blendedTaxRate}">
+        </div>
+      </div>
+      <div id="saleOutput" style="margin-top:16px;">${saleOutputHtml(sale, si)}</div>
+    </div>
+  `;
+}
+
+function renderResult(){
+  const d = draft;
+  const r = d.result;
+  const bucket = BUCKET_CONTENT[r.bucket];
+  const total = Math.max(1, r.debt + r.mezz + r.equity);
+  const cells = [['Debt', r.debt, r.bucket==='debt'],['Mezz', r.mezz, r.bucket==='mezz'],['Equity', r.equity, r.bucket==='equity']];
+
+  const isSale = r.bucket === 'sale';
+  const debtLinkHtml = r.bucket==='debt' || r.bucket==='mezz'
+    ? `<div class="btn-row"><a class="btn" style="text-decoration:none;" href="${DEBT_CALC_URL}" target="_blank">Open Debt Capacity Calculator →</a></div>`
+    : isSale
+      ? `<div class="routing-note">This is an M&amp;A conversation — loop in whoever runs sell-side process. The estimate below is a directional read for an initial conversation, not a valuation opinion.</div>`
+      : `<div class="routing-note">This is an equity conversation — loop in whoever's handling that relationship for the actual term sheet. The cost comparison below still shows what the equity route works out to at a glance.</div>`;
+
+  const middleSectionHtml = isSale
+    ? renderSaleAnalysis(d)
+    : `${renderCapacityWaterfall(d)}\n${renderCostComparison(d)}`;
+
+  return `
+  <div class="main">
+    <div class="btn-row" style="margin-bottom:20px;">
+      <button class="btn btn-ghost" id="backToWizardBtn">← Edit Answers</button>
+      <button class="btn btn-ghost" id="newFromResultBtn">+ New Assessment</button>
+      <button class="btn" id="printReportBtn">Print / Save as PDF</button>
+    </div>
+
+    <div class="result-banner">
+      <div class="result-eyebrow">${escapeHtml(bucket.eyebrow)}</div>
+      <div class="result-title">${escapeHtml(bucket.title)}</div>
+      <div class="result-desc">${escapeHtml(bucket.desc)}</div>
+      <div class="score-strip">
+        ${cells.map(([lbl,val,top])=>`<div class="score-cell ${top?'top':''}"><div class="score-lbl">${lbl} Signal</div><div class="score-val">${val}</div></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="bucket-card">
+      <h3>Pros &amp; Cons</h3>
+      <div class="pc-cols">
+        <div class="pc-col pros"><h4>Pros</h4><ul>${bucket.pros.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div>
+        <div class="pc-col cons"><h4>Cons</h4><ul>${bucket.cons.map(c=>`<li>${escapeHtml(c)}</li>`).join('')}</ul></div>
+      </div>
+    </div>
+
+    ${middleSectionHtml}
+
+    ${debtLinkHtml}
+
+    <div class="save-note">
+      ${saveState==='saved' ? 'Saved.' : saveState==='saving' ? 'Saving…' : saveState==='error' ? `Save failed: ${escapeHtml(lastSaveError)}` : ''}
+      <button class="btn" style="margin-top:12px;" id="saveAssessBtn">${currentId?'Update Saved Assessment':'Save Assessment'}</button>
+    </div>
+  </div>`;
+}
+
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function render(){
+  const app = $('app');
+  app.innerHTML = renderSidebar() + (view==='result' ? renderResult() : renderWizard());
+  wire();
+}
+
+function wire(){
+  const newBtn = $('newAssessBtn'); if(newBtn) newBtn.onclick = startNew;
+  const signOut = $('signOutBtn'); if(signOut) signOut.onclick = ()=>{ clearSession(); showAuthGate(); };
+  const toolSwitcher = $('toolSwitcher'); if(toolSwitcher) toolSwitcher.onchange = ()=>{ if(toolSwitcher.value) window.location.href = toolSwitcher.value; };
+  document.querySelectorAll('[data-open]').forEach(el=>{
+    el.onclick = ()=> openSaved(el.dataset.open);
+  });
+
+  if(view==='new'){
+    const pn = $('prospectName'); if(pn) pn.oninput = ()=>{ draft.prospectName = pn.value; };
+    const cn = $('companyName'); if(cn) cn.oninput = ()=>{ draft.companyName = cn.value; };
+    const an = $('amountNeeded'); if(an) an.oninput = ()=>{ draft.costInputs.amountNeeded = an.value; };
+    document.querySelectorAll('[data-fin]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{ draft.financials[inp.dataset.fin] = inp.value; });
+    });
+    document.querySelectorAll('.opt input').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const step = STEPS.find(s=>s.key===inp.name);
+        if(step.multi){
+          const set = new Set(draft[step.key]||[]);
+          if(inp.checked) set.add(inp.value); else set.delete(inp.value);
+          draft[step.key] = Array.from(set);
+        } else {
+          draft[step.key] = inp.value;
+        }
+        render();
+      });
+    });
+    const runBtn = $('runAssessBtn');
+    if(runBtn) runBtn.onclick = ()=>{
+      if(!isComplete(draft)) return;
+      draft.result = scoreAssessment(draft);
+      view = 'result';
+      saveState = 'idle';
+      render();
+    };
+  }
+
+  if(view==='result'){
+    const back = $('backToWizardBtn'); if(back) back.onclick = ()=>{ view='new'; render(); };
+    const again = $('newFromResultBtn'); if(again) again.onclick = startNew;
+    const save = $('saveAssessBtn'); if(save) save.onclick = ()=> persistAssessment(draft);
+    const printBtn = $('printReportBtn'); if(printBtn) printBtn.onclick = ()=> window.print();
+    document.querySelectorAll('[data-cost]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        draft.costInputs[inp.dataset.cost] = inp.value === '' ? 0 : Number(inp.value);
+        updateCostOutputs();
+      });
+    });
+    document.querySelectorAll('[data-sale]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        draft.saleInputs[inp.dataset.sale] = inp.value === '' ? 0 : Number(inp.value);
+        updateSaleOutputs();
+      });
+    });
+  }
+}
+
+(async function init(){
+  draft = blankDraft();
+  const session = await ensureValidSession();
+  if(session){
+    sb.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    enterApp();
+  } else {
+    showAuthGate();
+  }
+})();
+</script>
+</body>
+</html>
